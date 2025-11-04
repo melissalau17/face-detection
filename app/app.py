@@ -8,7 +8,9 @@ from dotenv import load_dotenv
 from flask import Flask, Response, request
 import subprocess
 
-from facetools import FaceDetection, IdentityVerification, LivenessDetection
+from facetools.face_detection import FaceDetection
+from facetools.liveness_detection import LivenessDetection
+from facetools.face_recognition import IdentityVerification
 
 root = Path(os.path.abspath(__file__)).parent.absolute()
 load_dotenv((root / ".env").as_posix())

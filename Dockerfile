@@ -3,7 +3,6 @@ FROM python:3.12-slim-bullseye
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Install system dependencies (for OpenCV, ONNX, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -25,10 +24,12 @@ COPY app ./app
 COPY data ./data
 COPY .env .env
 
-# Set Flask environment
+# Set Flask environment variables
 ENV FLASK_APP=app
+ENV FLASK_ENV=development
 ENV FLASK_RUN_HOST=0.0.0.0
 ENV FLASK_RUN_PORT=5000
+ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Expose Flask port
 EXPOSE 5000
