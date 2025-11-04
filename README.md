@@ -1,73 +1,129 @@
-# face-recognition-liveness
+# Face Recognition & Liveness Detection — Backend (Flask)
 
-Face liveness detection and indentity recognition using fast and accurate convolutional neural networks is implemented in Pytorch. Also a Flask API and ready-to-use Dockerfile can be found in this repository.
+This backend service provides **Face Recognition** and **Liveness Detection** APIs using ONNX models and MediaPipe.  
+It powers the Flutter mobile app by analyzing image data sent from the frontend.
 
-This project uses [Mediapipe](https://github.com/google/mediapipe) for face detection and the face recognition model is borrowed from [facenet-pytorch](https://github.com/timesler/facenet-pytorch) .The liveness detection model came from [Deep Pixel-wise Binary Supervision for Face Presentation Attack Detection](https://arxiv.org/abs/1907.04047) paper and, [pre-trained models](https://www.idiap.ch/software/bob/docs/bob/bob.paper.deep_pix_bis_pad.icb2019/master/pix_bis.html#using-pretrained-models) are published by authors.
+---
+
+## Project Structure
+
+app/
+├── app.py # Main Flask application
+├── facetools/ # Face detection, recognition, and liveness modules
+├── create_facebank.py # Utility to build the known-face database
+├── requirements.txt # Python dependencies
+├── Dockerfile # Container setup
+└── data/ # Model checkpoints & facebank.csv
 
 
-![face recognition and liveness](https://user-images.githubusercontent.com/43831412/181917410-a7df598b-8e89-419c-9505-6111676dc3a4.jpg)
+---
 
+## ⚙️ Setup
 
-## Getting Started
+### 1. 🧾 Requirements
+- Python 3.12+
+- (Optional) Docker
+- `data/` folder at project root, containing:
+  - `facebank.csv`
+  - model checkpoints (ONNX files)
 
-Download .onnx models and put them in `data/checkpoints` folder.
+---
 
-- [InceptionResnetV1_vggface2.onnx](https://github.com/ffletcherr/face-recognition-liveness/releases/download/v0.1/InceptionResnetV1_vggface2.onnx)
-- [OULU_Protocol_2_model_0_0.onnx](https://github.com/ffletcherr/face-recognition-liveness/releases/download/v0.1/OULU_Protocol_2_model_0_0.onnx)
+### 2. Environment Variables
 
->*Note:* If you have an internet connection, models will be downloaded automatically.
-
-## Simple Usage
-
-Run the following command to check liveness (and test are you Ryan Reynolds or not!)
+Create a `.env` file inside `app/`:
 
 ```bash
-$ python webcam_test.py
-```
-
->*Note:* Liveness score is between 0 and 1 and, in average, it is enough be greater than ~ **0.03** to be considered as a live image.
-
-
-## Create Facebank CSV
-In the first step you need a facebank. So put some images (jpg, jpeg, png) in a folder and create facebank csv file using `create_facebank.py` script:
-```
-$ python3 create_facebank.py --images ./data/images \
---checkpoint ./data/checkpoints/InceptionResnetV1_vggface2.onnx \
---output ./data/test.csv
-```
---images: the path to the images folder
-
---checkpoint: the path to the resnet vggface2 onnx checkpoint
-
---output: the path to the output csv file
-
-## Run Docker
-
-Now you can start the deployment process. Variables (models and facebank names) can be changed in `app/.env` file:
-```
 DATA_FOLDER=data
-RESNET=InceptionResnetV1_vggface2.onnx
+RESNET=inception_resnetv1.onnx
 DEEPPIX=OULU_Protocol_2_model_0_0.onnx
-FACEBANK=test.csv
+FACEBANK=facebank.csv
+API_URL=http://localhost:5000
+```
+---
+
+### 3. Run Locally
+```bash
+cd app
+python -m venv venv
+source venv/bin/activate      # Windows: venv\Scripts\activate
+pip install -r requirements.txt #install dependencies
+flask --app app:app run --debug
+```
+The server will start on: http://localhost:5000
+
+---
+## API Endpoints
+
+| Method | Endpoint     | Description                    |
+|---------|---------------|--------------------------------|
+| POST    | `/main`       | Face recognition + liveness detection |
+| POST    | `/identity`   | Identity verification only     |
+| POST    | `/liveness`   | Liveness detection only        |
+
+> **Content-Type:** `application/octet-stream`  
+> All endpoints expect an image as **raw binary** input.
+
+---
+
+## Example Request
+
+```python
+import requests
+
+with open("face.jpg", "rb") as f:
+    img = f.read()
+
+resp = requests.post("http://localhost:5000/main", data=img)
+print(resp.json())
 ```
 
-
-First build the docker image:
-
-```
-$ sudo docker build --tag face-demo .
-```
-
-Now run the image as a container:
+---
+## Example Response
 
 ```
-$ sudo docker run -p 5000:5000 face-demo python3 -m flask run --host=0.0.0.0 --port=5000
+{
+  "message": "Everything is OK.",
+  "min_sim_score": 0.79,
+  "mean_sim_score": 0.83,
+  "liveness_score": 0.97
+}
 ```
 
-### Test
-Finally we can test our app using a python client. So for testing just run this:
+---
+## Docker Deployment
+Deploy easily using Docker:
+
 ```
-# face-recognition-liveness/
-$ cd ./app
-$ python3 client.py --image ../data/images/reynolds_001.png --host localhost --port 5000 --service main 
+cd app
+docker build -t face-backend .
+docker run -p 5000:5000 face-backend
+
 ```
+
+---
+## Features
+- Flask-based REST API
+
+- ONNXRuntime for fast model inference
+
+- MediaPipe for accurate face detection
+
+- DeepPixBiS for liveness detection
+
+- ResNet for identity verification
+
+- Spoof logging to data/spoof_log.csv
+
+---
+
+## Project Structure
+app/
+│
+├── main.py                # Flask app entry point
+├── models/                # ONNX and deep learning models
+├── utils/                 # Helper scripts (face, liveness, identity)
+├── data/
+│   └── spoof_log.csv      # Log file for spoofing attempts
+├── requirements.txt       # Dependencies
+└── Dockerfile             # Docker configuration
