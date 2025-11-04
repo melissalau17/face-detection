@@ -1,76 +1,83 @@
-import argparse
-import csv
 import os
-import sys
-import urllib
-from glob import glob
+import zipfile
+import urllib.request
 from pathlib import Path
+import csv
+import sys
 
 import cv2
 import numpy as np
 import onnxruntime
 from tqdm import tqdm
+from facetools import FaceDetection
 
-from facetools import FaceDetection, IdentityVerification
+KAGGLE_DATASET = "vasukipatel/face-recognition-dataset"
+DATA_DIR = Path("./data")
+IMAGES_DIR = DATA_DIR / "images"
+CHECKPOINT_DIR = DATA_DIR / "checkpoints"
+CSV_OUTPUT = DATA_DIR / "facebank.csv"
+CHECKPOINT_FILE = CHECKPOINT_DIR / "InceptionResnetV1_vggface2.onnx"
 
-# Create the parser
-parser = argparse.ArgumentParser(description="Argument for creating facebank csv file")
+for path in [DATA_DIR, IMAGES_DIR, CHECKPOINT_DIR]:
+    path.mkdir(parents=True, exist_ok=True)
 
-# Add the arguments
-parser.add_argument(
-    "--images", metavar="path", type=str, help="the path to the images folder"
-)
-parser.add_argument(
-    "--checkpoint",
-    metavar="path",
-    type=str,
-    help="the path to the resnet vggface2 onnx checkpoint",
-)
-parser.add_argument(
-    "--output", metavar="path", type=str, help="the path to the output csv file"
-)
-args = parser.parse_args()
+try:
+    import kagglehub
+except ImportError:
+    os.system("pip install kagglehub")
 
-input_path = args.images
-checkpoint_path = args.checkpoint
-csv_path = args.output
+import kagglehub
 
-if not os.path.isdir(input_path):
-    print(f"The path [{input_path}] is not a directory")
-    sys.exit()
+print("Downloading Kaggle dataset...")
+dataset_zip = kagglehub.dataset_download(KAGGLE_DATASET)
+print(f"Downloaded: {dataset_zip}")
 
-images_list = (
-    glob(os.path.join(input_path, "*.jpg"))
-    + glob(os.path.join(input_path, "*.png"))
-    + glob(os.path.join(input_path, "*.jpeg"))
-)
+if dataset_zip.endswith(".zip"):
+    extract_dir = Path(dataset_zip).with_suffix("")  # remove .zip
+    print(f"Extracting dataset to {extract_dir} ...")
+    with zipfile.ZipFile(dataset_zip, 'r') as zip_ref:
+        zip_ref.extractall(extract_dir)
+    dataset_path = extract_dir
+else:
+    dataset_path = Path(dataset_zip)
 
-if not len(images_list):
-    print(f"There is not any images in the [{input_path}] path")
-    sys.exit()
+print("Copying images to standard folder...")
+image_extensions = ("*.jpg", "*.jpeg", "*.png")
+for ext in image_extensions:
+    for img_path in dataset_path.rglob(ext):
+        dest_path = IMAGES_DIR / img_path.name
+        if not dest_path.exists():
+            dest_path.write_bytes(img_path.read_bytes())
+
+if not CHECKPOINT_FILE.exists():
+    print("Downloading InceptionResnetV1 checkpoint...")
+    url = "https://github.com/ffletcherr/face-recognition-liveness/releases/download/v0.1/InceptionResnetV1_vggface2.onnx"
+    urllib.request.urlretrieve(url, CHECKPOINT_FILE)
+    print("Checkpoint downloaded.")
 
 faceDetector = FaceDetection()
-if not Path(checkpoint_path).is_file():
-    print("Downloading the Inception resnet v1 vggface2 onnx checkpoint")
-    urllib.request.urlretrieve(
-        "https://github.com/ffletcherr/face-recognition-liveness/releases/download/v0.1/InceptionResnetV1_vggface2.onnx",
-        Path(checkpoint_path).absolute().as_posix(),
-    )
-resnet = onnxruntime.InferenceSession(
-    checkpoint_path, providers=["CPUExecutionProvider"]
-)
+resnet = onnxruntime.InferenceSession(str(CHECKPOINT_FILE), providers=["CPUExecutionProvider"])
 
-f = open(csv_path, "w")
-writer = csv.writer(f)
-for image_path in tqdm(images_list):
-    image = cv2.imread(image_path)
-    faces, boxes = faceDetector(image)
-    if not len(faces):
-        continue
+images_list = []
+for ext in image_extensions:
+    images_list += list(IMAGES_DIR.glob(ext))
 
-    face_arr = faces[0]
-    face_arr = np.moveaxis(face_arr, -1, 0)
-    input_arr = np.expand_dims((face_arr - 127.5) / 128.0, 0)
-    embeddings = resnet.run(["output"], {"input": input_arr.astype(np.float32)})[0]
-    writer.writerow(embeddings.flatten().tolist())
-f.close()
+if not images_list:
+    print(f"No images found in {IMAGES_DIR}")
+    sys.exit()
+
+print("Generating facebank CSV...")
+with open(CSV_OUTPUT, "w", newline="") as f:
+    writer = csv.writer(f)
+    for img_path in tqdm(images_list):
+        image = cv2.imread(str(img_path))
+        faces, _ = faceDetector(image)
+        if not len(faces):
+            continue
+        face_arr = faces[0]
+        face_arr = np.moveaxis(face_arr, -1, 0)
+        input_arr = np.expand_dims((face_arr - 127.5) / 128.0, 0)
+        embeddings = resnet.run(["output"], {"input": input_arr.astype(np.float32)})[0]
+        writer.writerow(embeddings.flatten().tolist())
+
+print(f"facebank CSV created at {CSV_OUTPUT}")

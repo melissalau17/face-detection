@@ -1,18 +1,26 @@
-# syntax=docker/dockerfile:1
+# Use a modern Python base
+FROM python:3.12-slim-bullseye
 
-FROM python:3.9-slim-buster
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update
-RUN apt-get install ffmpeg libsm6 libxext6  -y
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg libsm6 libxext6 libgl1-mesa-glx \
+ && rm -rf /var/lib/apt/lists/*
 
+# Copy project
 WORKDIR /app
-
 COPY . .
 
-RUN pip3 install -r requirements.txt
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
 
-RUN pip3 install -e .
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /app/app
+# Expose Flask port
+EXPOSE 5000
 
-CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=5000"]
+# Start the app
+CMD ["python", "app.py"]

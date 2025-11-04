@@ -22,7 +22,7 @@ facebank_name = environ.get("FACEBANK")
 data_folder = root.parent / data_folder
 
 resNet_checkpoint_path = data_folder / "checkpoints" / resnet_name
-facebank_path = data_folder / facebank_name
+facebank_path = data_folder / "facebank.csv"
 
 deepPix_checkpoint_path = data_folder / "checkpoints" / deeppix_name
 
@@ -41,8 +41,10 @@ def main():
     r = request
     # convert string of image data to uint8
     nparr = np.frombuffer(r.data, np.uint8)
+    print("Received bytes:", len(nparr))
     # decode image
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    print("Decoded frame:", type(frame))
     faces, boxes = faceDetector(frame)
 
     if not len(faces):
